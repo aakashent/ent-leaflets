@@ -1,32 +1,32 @@
-// qr.js (diagnostic version)
+// qr.js (safe-mode diagnostics)
 
-// ====== CONFIG ======
-const LANDING_BASE = window.location.origin + window.location.pathname.replace(/qr\.html$/, 'landing.html');
+// IMPORTANT: we don't assume IDs exist. We probe for them and report status.
+// We also won't try to build QR unless we definitely have what we need.
 
-// ====== tiny util ======
-function escapeHTML(s){
-  return (s||'').replace(/[&<>"']/g, m => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'
-  }[m]));
-}
-
-// ====== minimal QR generator ======
+// -------- QR drawing core (unchanged) --------
 (function(){
   function QR8bitByte(data){this.data=data;}
-  QR8bitByte.prototype={getLength:function(){return this.data.length;},write:function(buf){for(var i=0;i<this.data.length;i++){buf.put(this.data.charCodeAt(i),8);}}};
+  QR8bitByte.prototype={
+    getLength:function(){return this.data.length;},
+    write:function(buf){
+      for(let i=0;i<this.data.length;i++){
+        buf.put(this.data.charCodeAt(i),8);
+      }
+    }
+  };
 
-  var QRUtil={
+  const QRUtil={
     PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34]],
-    getPatternPosition:function(t){return QRUtil.PATTERN_POSITION_TABLE[t-1];},
-    getBCHDigit:function(data){var digit=0;while(data!==0){digit++;data>>>=1;}return digit;},
-    getBCHTypeInfo:function(data){
-      var d=data<<10;
+    getPatternPosition(t){return QRUtil.PATTERN_POSITION_TABLE[t-1];},
+    getBCHDigit(data){let digit=0;while(data!==0){digit++;data>>>=1;}return digit;},
+    getBCHTypeInfo(data){
+      let d=data<<10;
       while(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(0x537)!==0){
         d^=(0x537<<(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(0x537)-0));
       }
       return((data<<10)|d)^0x5412;
     },
-    getMask:function(maskPattern,i,j){
+    getMask(maskPattern,i,j){
       switch(maskPattern){
         case 0:return (i+j)%2===0;
         case 1:return i%2===0;
@@ -40,56 +40,83 @@ function escapeHTML(s){
 
   function QRBitBuffer(){this.buffer=[];this.length=0;}
   QRBitBuffer.prototype={
-    get:function(i){var bufIndex=Math.floor(i/8);return((this.buffer[bufIndex]>>>(7-i%8))&1)===1;},
-    put:function(num,length){for(var i=0;i<length;i++){this.putBit(((num>>>(length-i-1))&1)===1);}},
-    getLengthInBits:function(){return this.length;},
-    putBit:function(bit){
-      var bufIndex=Math.floor(this.length/8);
+    get(i){
+      const bufIndex=Math.floor(i/8);
+      return((this.buffer[bufIndex]>>>(7-i%8))&1)===1;
+    },
+    put(num,length){
+      for(let i=0;i<length;i++){
+        this.putBit(((num>>>(length-i-1))&1)===1);
+      }
+    },
+    getLengthInBits(){return this.length;},
+    putBit(bit){
+      const bufIndex=Math.floor(this.length/8);
       if(this.buffer.length<=bufIndex){this.buffer.push(0);}
-      if(bit){this.buffer[bufIndex]|=(0x80>>>(this.length%8));}
+      if(bit){
+        this.buffer[bufIndex]|=(0x80>>>(this.length%8));
+      }
       this.length++;
     }
   };
 
-  var QRMath={};
-  QRMath.gexp=function(n){while(n<0){n+=255;}while(n>=256){n-=255;}return QRMath.EXP_TABLE[n];};
-  QRMath.glog=function(n){if(n<1)throw new Error("glog("+n+")");return QRMath.LOG_TABLE[n];};
+  const QRMath = {};
+  QRMath.gexp=function(n){
+    while(n<0){n+=255;}
+    while(n>=256){n-=255;}
+    return QRMath.EXP_TABLE[n];
+  };
+  QRMath.glog=function(n){
+    if(n<1) throw new Error("glog("+n+")");
+    return QRMath.LOG_TABLE[n];
+  };
   QRMath.EXP_TABLE=new Array(256);
   QRMath.LOG_TABLE=new Array(256);
-  for(var i=0;i<8;i++){QRMath.EXP_TABLE[i]=1<<i;}
-  for(i=8;i<256;i++){QRMath.EXP_TABLE[i]=QRMath.EXP_TABLE[i-4]^QRMath.EXP_TABLE[i-5]^QRMath.EXP_TABLE[i-6]^QRMath.EXP_TABLE[i-8];}
-  for(i=0;i<256;i++){QRMath.LOG_TABLE[QRMath.EXP_TABLE[i]]=i;}
+  for(let i=0;i<8;i++){QRMath.EXP_TABLE[i]=1<<i;}
+  for(let i=8;i<256;i++){
+    QRMath.EXP_TABLE[i]=QRMath.EXP_TABLE[i-4]^QRMath.EXP_TABLE[i-5]^QRMath.EXP_TABLE[i-6]^QRMath.EXP_TABLE[i-8];
+  }
+  for(let i=0;i<256;i++){
+    QRMath.LOG_TABLE[QRMath.EXP_TABLE[i]]=i;
+  }
 
   function QRPolynomial(num,shift){
-    var offset=0;
+    let offset=0;
     while(offset<num.length&&num[offset]===0){offset++;}
     this.num=new Array(num.length-offset+shift);
-    for(var i2=0;i2<num.length-offset;i2++){this.num[i2]=num[i2+offset];}
+    for(let i=0;i<num.length-offset;i++){
+      this.num[i]=num[i+offset];
+    }
   }
   QRPolynomial.prototype={
-    get:function(index){return this.num[index];},
-    getLength:function(){return this.num.length;},
-    multiply:function(e){
-      var num=new Array(this.getLength()+e.getLength()-1);
-      for(var i=0;i<this.getLength();i++){
-        for(var j=0;j<e.getLength();j++){
+    get(i){return this.num[i];},
+    getLength(){return this.num.length;},
+    multiply(e){
+      const num=new Array(this.getLength()+e.getLength()-1);
+      for(let i=0;i<this.getLength();i++){
+        for(let j=0;j<e.getLength();j++){
           num[i+j]^=QRMath.gexp(QRMath.glog(this.get(i))+QRMath.glog(e.get(j)));
         }
       }
       return new QRPolynomial(num,0);
     },
-    mod:function(e){
+    mod(e){
       if(this.getLength()-e.getLength()<0){return this;}
-      var ratio=QRMath.glog(this.get(0))-QRMath.glog(e.get(0));
-      var num=new Array(this.getLength());
-      for(var i=0;i<this.getLength();i++){num[i]=this.get(i);}
-      for(i=0;i<e.getLength();i++){num[i]^=QRMath.gexp(QRMath.glog(e.get(i))+ratio);}
+      const ratio=QRMath.glog(this.get(0))-QRMath.glog(e.get(0));
+      const num=new Array(this.getLength());
+      for(let i=0;i<this.getLength();i++){
+        num[i]=this.get(i);
+      }
+      for(let i=0;i<e.getLength();i++){
+        num[i]^=QRMath.gexp(QRMath.glog(e.get(i))+ratio);
+      }
       return new QRPolynomial(num,0).mod(e);
     }
   };
 
   function makeRSBlocks(){
-    return [{dataCount:34,totalCount:44}]; // version 2-L assumption
+    // version 2-L assumption is fine for short URLs
+    return [{dataCount:34,totalCount:44}];
   }
 
   function QRCode(typeNumber,maskPattern){
@@ -100,13 +127,13 @@ function escapeHTML(s){
     this.dataList=[];
   }
   QRCode.prototype={
-    addData:function(data){this.dataList.push(new QR8bitByte(data));},
-    make:function(){
+    addData(data){this.dataList.push(new QR8bitByte(data));},
+    make(){
       this.moduleCount=this.typeNumber*4+17;
       this.modules=new Array(this.moduleCount);
-      for(var row=0;row<this.moduleCount;row++){
+      for(let row=0;row<this.moduleCount;row++){
         this.modules[row]=new Array(this.moduleCount);
-        for(var col=0;col<this.moduleCount;col++){
+        for(let col=0;col<this.moduleCount;col++){
           this.modules[row][col]=null;
         }
       }
@@ -118,49 +145,57 @@ function escapeHTML(s){
       setupTypeInfo(this,true);
       setupTypeInfo(this,false);
 
-      var data=createData(this.typeNumber,this.dataList);
+      const data=createData(this.typeNumber,this.dataList);
       mapData(this,data);
     },
-    isDark:function(row,col){return this.modules[row][col];}
+    isDark(row,col){return this.modules[row][col];}
   };
 
   function setupPositionProbePattern(qr,row,col){
-    for(var r=-1;r<=7;r++){
+    for(let r=-1;r<=7;r++){
       if(row+r<=-1||qr.moduleCount<=row+r)continue;
-      for(var c=-1;c<=7;c++){
+      for(let c=-1;c<=7;c++){
         if(col+c<=-1||qr.moduleCount<=col+c)continue;
-        qr.modules[row+r][col+c]=(r>=0&&r<=6&&(c===0||c===6)) ||
-                                  (c>=0&&c<=6&&(r===0||r===6)) ||
-                                  (r>=2&&r<=4&&c>=2&&c<=4);
+        qr.modules[row+r][col+c]=(
+          (r>=0&&r<=6&&(c===0||c===6)) ||
+          (c>=0&&c<=6&&(r===0||r===6)) ||
+          (r>=2&&r<=4&&c>=2&&c<=4)
+        );
       }
     }
   }
   function setupTimingPattern(qr){
-    for(var r=8;r<qr.moduleCount-8;r++){
-      if(qr.modules[r][6]==null){qr.modules[r][6]=(r%2===0);}
+    for(let r=8;r<qr.moduleCount-8;r++){
+      if(qr.modules[r][6]==null){
+        qr.modules[r][6]=(r%2===0);
+      }
     }
-    for(var c=8;c<qr.moduleCount-8;c++){
-      if(qr.modules[6][c]==null){qr.modules[6][c]=(c%2===0);}
+    for(let c=8;c<qr.moduleCount-8;c++){
+      if(qr.modules[6][c]==null){
+        qr.modules[6][c]=(c%2===0);
+      }
     }
   }
   function setupPositionAdjustPattern(qr){
-    var pos=QRUtil.getPatternPosition(qr.typeNumber);
-    for(var i=0;i<pos.length;i++){
-      for(var j=0;j<pos.length;j++){
-        var row=pos[i],col=pos[j];
+    const pos=QRUtil.getPatternPosition(qr.typeNumber);
+    for(let i=0;i<pos.length;i++){
+      for(let j=0;j<pos.length;j++){
+        const row=pos[i],col=pos[j];
         if(qr.modules[row][col]!=null)continue;
-        for(var r=-2;r<=2;r++){
-          for(var c=-2;c<=2;c++){
-            qr.modules[row+r][col+c]=(r===-2||r===2||c===-2||c===2)||(r===0&&c===0);
+        for(let r=-2;r<=2;r++){
+          for(let c=-2;c<=2;c++){
+            qr.modules[row+r][col+c]=(
+              r===-2||r===2||c===-2||c===2||(r===0&&c===0)
+            );
           }
         }
       }
     }
   }
   function setupTypeInfo(qr){
-    var data=QRUtil.getBCHTypeInfo((0<<3)|qr.maskPattern);
-    for(var i=0;i<15;i++){
-      var mod=((data>>i)&1)===1;
+    const data=QRUtil.getBCHTypeInfo((0<<3)|qr.maskPattern);
+    for(let i=0;i<15;i++){
+      const mod=((data>>i)&1)===1;
       if(i<6){
         qr.modules[i][8]=mod;
       }else if(i<8){
@@ -169,8 +204,8 @@ function escapeHTML(s){
         qr.modules[qr.moduleCount-15+i][8]=mod;
       }
     }
-    for(i=0;i<15;i++){
-      var mod2=((data>>i)&1)===1;
+    for(let i=0;i<15;i++){
+      const mod2=((data>>i)&1)===1;
       if(i<8){
         qr.modules[8][qr.moduleCount-i-1]=mod2;
       }else if(i<9){
@@ -183,71 +218,77 @@ function escapeHTML(s){
   }
 
   function QRBitBufferWrapper(dataList){
-    var rsBlocks=makeRSBlocks();
-    var buffer=new QRBitBuffer();
-    for(var i=0;i<dataList.length;i++){
-      var data=dataList[i];
+    const rsBlocks=makeRSBlocks();
+    const buffer=new QRBitBuffer();
+    for(let i=0;i<dataList.length;i++){
+      const data=dataList[i];
       buffer.put(4,4); // mode 8bit byte
       buffer.put(data.getLength(),8);
       data.write(buffer);
     }
-    var totalDataCount=rsBlocks[0].dataCount;
+    const totalDataCount=rsBlocks[0].dataCount;
     if(buffer.getLengthInBits()>totalDataCount*8){
       throw new Error("Data too big");
     }
-    for(i=0;i<4 && buffer.getLengthInBits()<totalDataCount*8;i++){
+    for(let i=0;i<4 && buffer.getLengthInBits()<totalDataCount*8;i++){
       buffer.put(0,1);
     }
     while(buffer.getLengthInBits()%8!==0){
       buffer.putBit(false);
     }
-    var padBytes=[0xec,0x11];var idx=0;
+    const padBytes=[0xec,0x11];
+    let idx=0;
     while(buffer.getLengthInBits()<totalDataCount*8){
-      buffer.put(padBytes[idx%2],8);idx++;
+      buffer.put(padBytes[idx%2],8);
+      idx++;
     }
-    var dataWords=[];
-    for(i=0;i<totalDataCount;i++){
+
+    const dataWords=[];
+    for(let i=0;i<totalDataCount;i++){
       dataWords.push(0xff & buffer.buffer[i]);
     }
-    var ecCount=rsBlocks[0].totalCount-rsBlocks[0].dataCount;
-    var rsPoly=getErrorCorrectPolynomial(ecCount);
-    var modPoly=new QRPolynomial(dataWords,0).mod(rsPoly);
-    var ecWords=new Array(ecCount);
-    for(i=0;i<ecWords.length;i++){
+
+    const ecCount=rsBlocks[0].totalCount-rsBlocks[0].dataCount;
+    const rsPoly=getErrorCorrectPolynomial(ecCount);
+    const modPoly=new QRPolynomial(dataWords,0).mod(rsPoly);
+    const ecWords=new Array(ecCount);
+    for(let i=0;i<ecWords.length;i++){
       ecWords[i]=modPoly.get(i);
     }
-    var codewords=[];
-    for(i=0;i<rsBlocks[0].dataCount;i++){
+
+    const codewords=[];
+    for(let i=0;i<rsBlocks[0].dataCount;i++){
       codewords.push(dataWords[i]);
     }
-    for(i=0;i<ecWords.length;i++){
+    for(let i=0;i<ecWords.length;i++){
       codewords.push(ecWords[i]);
     }
+
     return codewords;
   }
   function getErrorCorrectPolynomial(ecCount){
-    var a=new QRPolynomial([1],0);
-    for(var i=0;i<ecCount;i++){
+    let a=new QRPolynomial([1],0);
+    for(let i=0;i<ecCount;i++){
       a=a.multiply(new QRPolynomial([1,QRMath.gexp(i)],0));
     }
     return a;
   }
   function mapData(qr,codewords){
-    var inc=-1;
-    var row=qr.moduleCount-1;
-    var bitIndex=7;
-    var byteIndex=0;
+    let inc=-1;
+    let row=qr.moduleCount-1;
+    let bitIndex=7;
+    let byteIndex=0;
 
-    for(var col=qr.moduleCount-1;col>0;col-=2){
+    for(let col=qr.moduleCount-1;col>0;col-=2){
       if(col===6) col--;
       for(;;){
-        for(var c=0;c<2;c++){
+        for(let c=0;c<2;c++){
           if(qr.modules[row][col-c]==null){
-            var dark=false;
+            let dark=false;
             if(byteIndex<codewords.length){
               dark = ((codewords[byteIndex]>>>bitIndex)&1)===1;
             }
-            dark = dark ^ QRUtil.getMask(qr.maskPattern,row,col-c);
+            dark = dark ^ QRUtil.getMask(0,row,col-c);
             qr.modules[row][col-c]=dark;
             bitIndex--;
             if(bitIndex===-1){
@@ -270,11 +311,11 @@ function escapeHTML(s){
   }
 
   function makeQRToCanvas(text, canvas, scale){
-    var qr = new QRCode(2,0);
+    const qr = new QRCode(2,0);
     qr.addData(text);
     qr.make();
 
-    var ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d");
     const count = qr.moduleCount;
     const sizePerModule = scale || 6;
     const size = count * sizePerModule;
@@ -285,8 +326,8 @@ function escapeHTML(s){
     ctx.fillRect(0,0,size,size);
 
     ctx.fillStyle = "#000";
-    for (var r=0;r<count;r++){
-      for (var c=0;c<count;c++){
+    for (let r=0;r<count;r++){
+      for (let c=0;c<count;c++){
         if (qr.isDark(r,c)){
           ctx.fillRect(
             c*sizePerModule,
@@ -299,35 +340,46 @@ function escapeHTML(s){
     }
   }
 
-  window.makeQRToCanvas = makeQRToCanvas;
+  window.__ENT_makeQRToCanvas = makeQRToCanvas;
 })();
 
-// ====== main app logic ======
+// -------- Safe initialiser --------
 document.addEventListener('DOMContentLoaded', () => {
-  const packSelect       = document.getElementById('packSelect');
-  const packUrlPreview   = document.getElementById('packUrlPreview');
-  const packContents     = document.getElementById('packContents');
+  // Try to bind elements
+  const els = {
+    packSelect:        document.getElementById('packSelect'),
+    packUrlPreview:    document.getElementById('packUrlPreview'),
+    packContents:      document.getElementById('packContents'),
+    leafletListEl:     document.getElementById('leafletList'),
+    customUrlPreview:  document.getElementById('customUrlPreview'),
+    contentsPreview:   document.getElementById('contentsPreview'),
+    qrCanvas:          document.getElementById('qrCanvas'),
+    downloadBtn:       document.getElementById('downloadBtn'),
+    customMakeBtn:     document.getElementById('customMakeBtn'),
+    diag:              document.getElementById('diag')
+  };
 
-  const leafletListEl    = document.getElementById('leafletList');
-  const customUrlPreview = document.getElementById('customUrlPreview');
-  const contentsPreview  = document.getElementById('contentsPreview');
-
-  const qrCanvas         = document.getElementById('qrCanvas');
-  const downloadBtn      = document.getElementById('downloadBtn');
-  const customMakeBtn    = document.getElementById('customMakeBtn');
-
-  const diag             = document.getElementById('diag');
-
-  // sanity check DOM bindings
-  if (!packSelect || !leafletListEl || !qrCanvas || !diag) {
-    console.error("Critical elements missing", {
-      packSelect, leafletListEl, qrCanvas, diag
-    });
-    if (diag) {
-      diag.textContent = "Setup error: missing expected elements. Check element IDs in qr.html match qr.js.";
-    }
+  // If we can't even show diag, bail without crashing
+  if (!els.diag) {
+    console.warn("qr.js: no #diag element found at all. Stopping.");
     return;
   }
+
+  // Report what we found
+  els.diag.textContent = "Binding elements..." +
+    "\npackSelect: "      + !!els.packSelect +
+    "\nleafletListEl: "   + !!els.leafletListEl +
+    "\nqrCanvas: "        + !!els.qrCanvas +
+    "\ncustomMakeBtn: "   + !!els.customMakeBtn;
+
+  // If we don't have core elements, don't continue past this point
+  if (!els.packSelect || !els.leafletListEl || !els.qrCanvas || !els.customMakeBtn) {
+    els.diag.textContent += "\nMissing required elements. Check that qr.html still has the original IDs.";
+    return;
+  }
+
+  // If we get here, proceed to fetch data
+  const LANDING_BASE = window.location.origin + window.location.pathname.replace(/qr\.html$/, 'landing.html');
 
   let packs = {};
   let leaflets = [];
@@ -341,69 +393,66 @@ document.addEventListener('DOMContentLoaded', () => {
     packs = packsData || {};
     leaflets = leafletsData || [];
 
-    diag.textContent = `Loaded ${Object.keys(packs).length} packs and ${leaflets.length} leaflets.`;
+    els.diag.textContent +=
+      "\nLoaded packs: " + Object.keys(packs).length +
+      "\nLoaded leaflets: " + leaflets.length;
 
     setupPackMode();
     setupCustomMode();
   })
   .catch(err=>{
-    console.error("Fetch/init error", err);
-    diag.textContent = 'Error loading data: ' + err.message;
+    els.diag.textContent += "\nError loading data: " + err.message;
   });
 
-  // Build dropdown for saved packs
   function setupPackMode(){
     const keys = Object.keys(packs);
     if (!keys.length){
-      packSelect.innerHTML = '<option value="">(no packs)</option>';
+      els.packSelect.innerHTML = '<option value="">(no packs)</option>';
       return;
     }
 
-    // populate dropdown
-    const packOptions = keys.sort()
-      .map(id => `<option value="${id}">${id}</option>`)
-      .join('');
-    packSelect.innerHTML = packOptions;
+    els.packSelect.innerHTML = keys.sort().map(id =>
+      `<option value="${id}">${id}</option>`
+    ).join('');
 
-    // set listener
-    packSelect.addEventListener('change', ()=>{
-      updatePackPreview(packSelect.value);
+    els.packSelect.addEventListener('change', ()=>{
+      updatePackPreview(els.packSelect.value);
     });
 
-    // load first pack by default
     updatePackPreview(keys.sort()[0]);
   }
 
   function updatePackPreview(packId){
     if (!packId){
-      packUrlPreview.textContent = '';
-      packContents.textContent = '';
+      if (els.packUrlPreview) els.packUrlPreview.textContent = '';
+      if (els.packContents)   els.packContents.textContent   = '';
       return;
     }
 
     const ids = packs[packId] || [];
     const url = LANDING_BASE + '?pack=' + encodeURIComponent(packId);
 
-    packUrlPreview.textContent = url;
+    if (els.packUrlPreview) els.packUrlPreview.textContent = url;
 
     const lines = ids
       .map(id => leaflets.find(l => String(l.id) === String(id)))
       .filter(Boolean)
       .map(l => `• ${l.Title}`);
 
-    packContents.textContent = lines.join('\n');
+    if (els.packContents) els.packContents.textContent = lines.join('\n');
 
     currentQrUrl = url;
-    if (qrCanvas && window.makeQRToCanvas){
-      window.makeQRToCanvas(url, qrCanvas, 6);
+    if (els.qrCanvas && window.__ENT_makeQRToCanvas){
+      window.__ENT_makeQRToCanvas(url, els.qrCanvas, 6);
     }
 
-    downloadBtn.onclick = ()=>{
-      downloadQR('pack-' + packId);
-    };
+    if (els.downloadBtn){
+      els.downloadBtn.onclick = ()=>{
+        downloadQR('pack-' + packId);
+      };
+    }
   }
 
-  // Build checklist for custom bundle
   function setupCustomMode(){
     const byCat = {};
     leaflets.forEach(l =>{
@@ -412,7 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
       byCat[cat].push(l);
     });
 
-    const catHtml = Object.keys(byCat).sort().map(cat=>{
+    els.leafletListEl.innerHTML = Object.keys(byCat).sort().map(cat=>{
       const rows = byCat[cat]
         .sort((a,b)=>String(a.Title).localeCompare(String(b.Title)))
         .map(l => `
@@ -436,44 +485,50 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
     }).join('');
 
-    leafletListEl.innerHTML = catHtml;
-
-    customMakeBtn.addEventListener('click', ()=>{
+    els.customMakeBtn.addEventListener('click', ()=>{
       const chosenIds = Array
-        .from(leafletListEl.querySelectorAll('.leaflet-check'))
+        .from(els.leafletListEl.querySelectorAll('.leaflet-check'))
         .filter(b => b.checked)
         .map(b => b.value);
 
       if (!chosenIds.length){
-        customUrlPreview.textContent = '(Choose at least one leaflet)';
-        contentsPreview.textContent = '';
+        if (els.customUrlPreview) els.customUrlPreview.textContent = '(Choose at least one leaflet)';
+        if (els.contentsPreview)  els.contentsPreview.textContent  = '';
         return;
       }
 
       const url = LANDING_BASE + '?ids=' + chosenIds.join(',');
-      customUrlPreview.textContent = url;
+      if (els.customUrlPreview) els.customUrlPreview.textContent = url;
 
       const lines = chosenIds
         .map(id => leaflets.find(l => String(l.id) === String(id)))
         .filter(Boolean)
         .map(l => `• ${l.Title}`);
-      contentsPreview.textContent = lines.join('\n');
+      if (els.contentsPreview) els.contentsPreview.textContent = lines.join('\n');
 
       currentQrUrl = url;
-      if (qrCanvas && window.makeQRToCanvas){
-        window.makeQRToCanvas(url, qrCanvas, 6);
+      if (els.qrCanvas && window.__ENT_makeQRToCanvas){
+        window.__ENT_makeQRToCanvas(url, els.qrCanvas, 6);
       }
 
-      downloadBtn.onclick = ()=>{
-        downloadQR('custom-' + chosenIds.join('-'));
-      };
+      if (els.downloadBtn){
+        els.downloadBtn.onclick = ()=>{
+          downloadQR('custom-' + chosenIds.join('-'));
+        };
+      }
     });
   }
 
   function downloadQR(name){
     const link = document.createElement('a');
     link.download = name + '.png';
-    link.href = qrCanvas.toDataURL('image/png');
+    link.href = els.qrCanvas.toDataURL('image/png');
     link.click();
+  }
+
+  function escapeHTML(s){
+    return (s||'').replace(/[&<>"']/g, m => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'
+    }[m]));
   }
 });
