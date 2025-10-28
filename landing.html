@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ENT Leaflets</title>
+  <link rel="stylesheet" href="patient.css" />
+</head>
+<body>
+  <main class="wrapper">
+    <section class="brand-block">
+      <div class="brand-logo" aria-hidden="true"></div>
+      <div class="brand-text">
+        <h1 class="brand-title">ENT Leaflets</h1>
+        <p class="brand-subline" id="leadLine">
+          Please see below for your personalised leaflets.
+        </p>
+        <p class="signature-line">
+          Aakash Amlani · Consultant ENT Surgeon
+        </p>
+      </div>
+    </section>
+
+    <!-- multiple / list mode -->
+    <section id="multiSection" hidden>
+      <ul id="infoList" class="info-list"></ul>
+    </section>
+
+    <!-- if nothing found -->
+    <section id="notFoundSection" hidden>
+      <div class="not-found-block">
+        We couldn’t find that information.  
+        The code may be out of date.  
+        Please ask your clinician for the updated link.
+      </div>
+    </section>
+
+    <p class="footer-note">
+      If you are bleeding heavily, struggling to breathe, in severe pain that is getting worse, or generally unwell, please seek urgent medical attention.
+    </p>
+  </main>
+
+  <script src="landing.js"></script>
+</body>
+</html>
