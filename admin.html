@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Packs Admin</title>
+  <style>
+    :root{
+      --bg:#ffffff; --ink:#1f2328; --ink-muted:#5d6670; --line:#e9eef2;
+      --brand:#2b7a78; --brand-ink:#ffffff;
+      --chip:#f4f8f7;
+      --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.06);
+      --focus:#0a84ff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+    }
+    *{box-sizing:border-box;}
+    body{
+      margin:16px;
+      background:var(--bg);
+      color:var(--ink);
+      font-family:inherit;
+      line-height:1.5;
+      max-width:1200px;
+    }
+    header{margin-bottom:16px;}
+    h1{font-size:24px;margin:0 0 4px;font-weight:700;color:var(--ink);}
+    p{margin:0 0 12px;font-size:14px;color:var(--ink-muted);}
+
+    .wrap{
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      background:#fff;
+      padding:16px;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns:260px 1fr;
+      gap:16px;
+    }
+    @media(max-width:800px){
+      .grid{
+        grid-template-columns:1fr;
+      }
+    }
+
+    h2{font-size:16px;font-weight:600;margin:0 0 8px;color:var(--ink);}
+    .hint{font-size:13px;color:var(--ink-muted);margin:0 0 12px;line-height:1.4;}
+
+    label{
+      font-size:14px;
+      font-weight:600;
+      color:var(--ink);
+      display:block;
+      margin:0 0 4px;
+    }
+
+    .input,.select{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:transparent;
+      color:var(--ink);
+      padding:10px 12px;
+      font-size:15px;
+      outline:none;
+    }
+    .input:focus,.select:focus{
+      box-shadow:0 0 0 3px color-mix(in oklab, var(--focus) 25%, transparent);
+    }
+
+    .leaflet-box{
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      background:#fff;
+      max-height:320px;
+      overflow:auto;
+      padding:0;
+    }
+    .cat-head{
+      font-size:13px;
+      font-weight:600;
+      color:var(--ink-muted);
+      padding:8px 12px 4px;
+    }
+    .leaf-item{
+      display:flex;
+      gap:8px;
+      align-items:flex-start;
+      border-top:1px solid var(--line);
+      padding:10px 12px;
+      font-size:14px;
+    }
+    .leaf-item:first-of-type{
+      border-top:0;
+    }
+    .leaf-title{
+      font-weight:600;
+      color:var(--ink);
+      line-height:1.4;
+    }
+    .leaf-cat{
+      font-size:12px;
+      color:var(--ink-muted);
+      line-height:1.4;
+    }
+
+    .output{
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      background:#fff;
+      box-shadow:var(--shadow);
+      font-family:var(--mono);
+      font-size:13px;
+      line-height:1.4;
+      padding:12px;
+      white-space:pre;
+      overflow:auto;
+      max-height:320px;
+    }
+
+    button.btn{
+      border:1px solid var(--brand);
+      background:var(--brand);
+      color:var(--brand-ink);
+      border-radius:10px;
+      padding:8px 12px;
+      font-weight:650;
+      cursor:pointer;
+      font-size:14px;
+      line-height:1.2;
+      margin-top:12px;
+    }
+
+    #diag{
+      font-size:12px;
+      color:var(--ink-muted);
+      margin-top:16px;
+      line-height:1.4;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Packs Admin</h1>
+    <p>Create/update named packs (like "tonsils"). Copy the preview JSON and paste it into packs.json.</p>
+  </header>
+
+  <section class="wrap grid">
+    <div>
+      <h2>Pack definition</h2>
+      <p class="hint">Select an existing pack or choose "— New pack —", then tick which leaflets belong in it.</p>
+
+      <label for="packSelect">Existing pack</label>
+      <select id="packSelect" class="select"></select>
+      <p class="hint">These come from packs.json.</p>
+
+      <label for="packIdInput">Pack ID (used in ?pack=...)</label>
+      <input id="packIdInput" class="input" placeholder="e.g. tonsils" />
+
+      <label>Leaflets in this pack</label>
+      <div id="leafletList" class="leaflet-box"></div>
+    </div>
+
+    <div>
+      <h2>packs.json preview</h2>
+      <p class="hint">
+        After you click “Update preview”, copy the text below and paste into packs.json in GitHub, then commit.
+      </p>
+
+      <div id="packsPreview" class="output">{}</div>
+      <button id="saveBtn" class="btn">Update preview</button>
+    </div>
+  </section>
+
+  <div id="diag"></div>
+
+  <script src="admin.js"></script>
+</body>
+</html>
