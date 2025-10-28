@@ -1,8 +1,14 @@
+// qr.js (diagnostic version)
+
 // ====== CONFIG ======
-// For GitHub Pages default, this auto-guesses landing.html next to qr.html.
-// Later, when you move to your private domain, replace with:
-// const LANDING_BASE = "https://aftercare.your-private-domain/landing.html";
 const LANDING_BASE = window.location.origin + window.location.pathname.replace(/qr\.html$/, 'landing.html');
+
+// ====== tiny util ======
+function escapeHTML(s){
+  return (s||'').replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'
+  }[m]));
+}
 
 // ====== minimal QR generator ======
 (function(){
@@ -83,8 +89,7 @@ const LANDING_BASE = window.location.origin + window.location.pathname.replace(/
   };
 
   function makeRSBlocks(){
-    // Version 2-L only; enough for these short URLs
-    return [{dataCount:34,totalCount:44}];
+    return [{dataCount:34,totalCount:44}]; // version 2-L assumption
   }
 
   function QRCode(typeNumber,maskPattern){
@@ -297,8 +302,8 @@ const LANDING_BASE = window.location.origin + window.location.pathname.replace(/
   window.makeQRToCanvas = makeQRToCanvas;
 })();
 
-// ====== app logic ======
-(function(){
+// ====== main app logic ======
+document.addEventListener('DOMContentLoaded', () => {
   const packSelect       = document.getElementById('packSelect');
   const packUrlPreview   = document.getElementById('packUrlPreview');
   const packContents     = document.getElementById('packContents');
@@ -313,6 +318,17 @@ const LANDING_BASE = window.location.origin + window.location.pathname.replace(/
 
   const diag             = document.getElementById('diag');
 
+  // sanity check DOM bindings
+  if (!packSelect || !leafletListEl || !qrCanvas || !diag) {
+    console.error("Critical elements missing", {
+      packSelect, leafletListEl, qrCanvas, diag
+    });
+    if (diag) {
+      diag.textContent = "Setup error: missing expected elements. Check element IDs in qr.html match qr.js.";
+    }
+    return;
+  }
+
   let packs = {};
   let leaflets = [];
   let currentQrUrl = '';
@@ -324,75 +340,94 @@ const LANDING_BASE = window.location.origin + window.location.pathname.replace(/
   .then(([packsData, leafletsData])=>{
     packs = packsData || {};
     leaflets = leafletsData || [];
+
+    diag.textContent = `Loaded ${Object.keys(packs).length} packs and ${leaflets.length} leaflets.`;
+
     setupPackMode();
     setupCustomMode();
-    diag.textContent = 'Loaded ' + Object.keys(packs).length + ' packs and ' + leaflets.length + ' leaflets.';
   })
   .catch(err=>{
+    console.error("Fetch/init error", err);
     diag.textContent = 'Error loading data: ' + err.message;
   });
 
-  // Pack mode (Option A)
+  // Build dropdown for saved packs
   function setupPackMode(){
-    const packOptions = Object.keys(packs).sort()
+    const keys = Object.keys(packs);
+    if (!keys.length){
+      packSelect.innerHTML = '<option value="">(no packs)</option>';
+      return;
+    }
+
+    // populate dropdown
+    const packOptions = keys.sort()
       .map(id => `<option value="${id}">${id}</option>`)
       .join('');
     packSelect.innerHTML = packOptions;
 
+    // set listener
     packSelect.addEventListener('change', ()=>{
       updatePackPreview(packSelect.value);
     });
 
-    if (Object.keys(packs).length){
-      updatePackPreview(Object.keys(packs).sort()[0]);
-    }
+    // load first pack by default
+    updatePackPreview(keys.sort()[0]);
   }
 
   function updatePackPreview(packId){
+    if (!packId){
+      packUrlPreview.textContent = '';
+      packContents.textContent = '';
+      return;
+    }
+
     const ids = packs[packId] || [];
     const url = LANDING_BASE + '?pack=' + encodeURIComponent(packId);
+
     packUrlPreview.textContent = url;
 
-    const items = ids
+    const lines = ids
       .map(id => leaflets.find(l => String(l.id) === String(id)))
       .filter(Boolean)
       .map(l => `• ${l.Title}`);
 
-    packContents.textContent = items.join('\n');
+    packContents.textContent = lines.join('\n');
 
     currentQrUrl = url;
-    makeQRToCanvas(url, qrCanvas, 6);
+    if (qrCanvas && window.makeQRToCanvas){
+      window.makeQRToCanvas(url, qrCanvas, 6);
+    }
 
     downloadBtn.onclick = ()=>{
       downloadQR('pack-' + packId);
     };
   }
 
-  // Custom mode (Option B)
+  // Build checklist for custom bundle
   function setupCustomMode(){
     const byCat = {};
     leaflets.forEach(l =>{
       const cat = l.Category || 'Other';
-      (byCat[cat] ||= []).push(l);
+      if (!byCat[cat]) byCat[cat] = [];
+      byCat[cat].push(l);
     });
 
-    leafletListEl.innerHTML = Object.keys(byCat).sort().map(cat=>{
+    const catHtml = Object.keys(byCat).sort().map(cat=>{
       const rows = byCat[cat]
         .sort((a,b)=>String(a.Title).localeCompare(String(b.Title)))
-        .map(l => {
-          return `
-            <div class="leaflet-item">
-              <input type="checkbox"
-                     class="leaflet-check"
-                     value="${l.id}"
-                     style="margin-top:2px;flex-shrink:0;">
-              <div>
-                <div class="leaflet-title">${escapeHTML(l.Title)}</div>
-                <div class="leaflet-cat">${escapeHTML(cat)}</div>
-              </div>
+        .map(l => `
+          <div class="leaflet-item">
+            <input type="checkbox"
+                   class="leaflet-check"
+                   value="${l.id}"
+                   style="margin-top:2px;flex-shrink:0;">
+            <div>
+              <div class="leaflet-title">${escapeHTML(l.Title)}</div>
+              <div class="leaflet-cat">${escapeHTML(cat)}</div>
             </div>
-          `;
-        }).join('');
+          </div>
+        `).join('');
+
       return `
         <div>
           <div class="cat-head">${escapeHTML(cat)}</div>
@@ -401,12 +436,13 @@ const LANDING_BASE = window.location.origin + window.location.pathname.replace(/
       `;
     }).join('');
 
+    leafletListEl.innerHTML = catHtml;
+
     customMakeBtn.addEventListener('click', ()=>{
-      const chosenIds = Array.from(
-        leafletListEl.querySelectorAll('.leaflet-check')
-      )
-      .filter(b => b.checked)
-      .map(b => b.value);
+      const chosenIds = Array
+        .from(leafletListEl.querySelectorAll('.leaflet-check'))
+        .filter(b => b.checked)
+        .map(b => b.value);
 
       if (!chosenIds.length){
         customUrlPreview.textContent = '(Choose at least one leaflet)';
@@ -417,14 +453,16 @@ const LANDING_BASE = window.location.origin + window.location.pathname.replace(/
       const url = LANDING_BASE + '?ids=' + chosenIds.join(',');
       customUrlPreview.textContent = url;
 
-      const items = chosenIds
+      const lines = chosenIds
         .map(id => leaflets.find(l => String(l.id) === String(id)))
         .filter(Boolean)
         .map(l => `• ${l.Title}`);
-      contentsPreview.textContent = items.join('\n');
+      contentsPreview.textContent = lines.join('\n');
 
       currentQrUrl = url;
-      makeQRToCanvas(url, qrCanvas, 6);
+      if (qrCanvas && window.makeQRToCanvas){
+        window.makeQRToCanvas(url, qrCanvas, 6);
+      }
 
       downloadBtn.onclick = ()=>{
         downloadQR('custom-' + chosenIds.join('-'));
@@ -438,10 +476,4 @@ const LANDING_BASE = window.location.origin + window.location.pathname.replace(/
     link.href = qrCanvas.toDataURL('image/png');
     link.click();
   }
-
-  function escapeHTML(s){
-    return (s||'').replace(/[&<>"']/g, m => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'
-    }[m]));
-  }
-})();
+});
