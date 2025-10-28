@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR Code Generator</title>
+  <style>
+    :root{
+      --bg:#ffffff; --ink:#1f2328; --ink-muted:#5d6670; --line:#e9eef2;
+      --brand:#2b7a78; --brand-ink:#ffffff;
+      --chip:#f4f8f7;
+      --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.06);
+      --focus:#0a84ff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+    }
+    *{box-sizing:border-box;}
+    body{
+      margin:16px;
+      background:var(--bg);
+      color:var(--ink);
+      font-family:inherit;
+      line-height:1.5;
+      max-width:1100px;
+    }
+    header{margin-bottom:16px;}
+    h1{font-size:24px;margin:0 0 4px;font-weight:700;color:var(--ink);}
+    p{margin:0 0 12px;font-size:14px;color:var(--ink-muted);}
+
+    .panel{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:16px;
+      margin-bottom:16px;
+    }
+
+    h2{font-size:16px;font-weight:600;margin:0 0 8px;color:var(--ink);}
+    .subhead{font-size:13px;color:var(--ink-muted);margin:0 0 12px;line-height:1.4;}
+
+    .row{
+      display:flex;
+      flex-wrap:wrap;
+      gap:16px;
+    }
+    .col{
+      flex:1 1 260px;
+      min-width:0;
+    }
+    .col-narrow{
+      flex:0 0 240px;
+    }
+
+    @media(max-width:600px){
+      .col,
+      .col-narrow{
+        flex:1 1 100%;
+      }
+      .col-narrow{
+        max-width:100%;
+      }
+    }
+
+    label{
+      font-size:14px;
+      font-weight:600;
+      color:var(--ink);
+      display:block;
+      margin:0 0 4px;
+    }
+    .hint{
+      font-size:13px;
+      color:var(--ink-muted);
+      margin:0 0 12px;
+      line-height:1.4;
+    }
+
+    select, input[type=text]{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:transparent;
+      color:var(--ink);
+      padding:10px 12px;
+      font-size:15px;
+      outline:none;
+    }
+    select:focus,
+    input[type=text]:focus{
+      box-shadow:0 0 0 3px color-mix(in oklab, var(--focus) 25%, transparent);
+    }
+
+    .qr-url-preview{
+      word-break:break-word;
+      font-size:13px;
+      color:var(--ink-muted);
+      line-height:1.4;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:var(--chip);
+      padding:8px 10px;
+      font-family:var(--mono);
+    }
+
+    #qrCanvasWrap{
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+      display:inline-block;
+      padding:12px;
+    }
+
+    button.btn{
+      border:1px solid var(--brand);
+      background:var(--brand);
+      color:var(--brand-ink);
+      border-radius:10px;
+      padding:8px 12px;
+      font-weight:650;
+      cursor:pointer;
+      font-size:14px;
+      line-height:1.2;
+    }
+
+    .leaflet-box{
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      background:#fff;
+      max-height:300px;
+      overflow:auto;
+      padding:0;
+    }
+    .cat-head{
+      font-size:13px;
+      font-weight:600;
+      color:var(--ink-muted);
+      padding:8px 12px 4px;
+    }
+    .leaflet-item{
+      border-top:1px solid var(--line);
+      padding:10px 12px;
+      display:flex;
+      gap:8px;
+      align-items:flex-start;
+      font-size:14px;
+    }
+    .leaflet-item:first-of-type{
+      border-top:0;
+    }
+    .leaflet-title{
+      font-weight:600;
+      color:var(--ink);
+      line-height:1.4;
+    }
+    .leaflet-cat{
+      font-size:12px;
+      color:var(--ink-muted);
+      line-height:1.4;
+    }
+
+    #contentsPreview{
+      font-size:13px;
+      color:var(--ink-muted);
+      line-height:1.4;
+      margin-top:8px;
+      white-space:pre-line;
+    }
+    #diag{
+      font-size:12px;
+      color:var(--ink-muted);
+      margin-top:16px;
+      line-height:1.4;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>QR Code Generator</h1>
+    <p>Pick a <strong>saved pack</strong> (tonsils etc.) or make a <strong>custom bundle</strong> for this patient.</p>
+  </header>
+
+  <section class="panel">
+    <h2>Option A: Saved pack</h2>
+    <p class="subhead">
+      Use this for standard advice sets (e.g. tonsillectomy). QR will point to <code>?pack=...</code>.
+    </p>
+
+    <div class="row">
+      <div class="col">
+        <label for="packSelect">Pack</label>
+        <select id="packSelect"></select>
+        <p class="hint">These come from packs.json (edit packs in admin.html).</p>
+
+        <label>Patient-facing URL</label>
+        <div id="packUrlPreview" class="qr-url-preview"></div>
+
+        <div id="packContents" class="hint"></div>
+      </div>
+
+      <div class="col-narrow" style="text-align:center;">
+        <label>QR preview</label>
+        <div id="qrCanvasWrap">
+          <canvas id="qrCanvas" width="200" height="200"></canvas>
+        </div>
+        <p><button id="downloadBtn" class="btn">Download PNG</button></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Option B: Custom bundle</h2>
+    <p class="subhead">
+      Tick 1–5 items below to generate an on-the-fly pack. QR will point to <code>?ids=1,5,9</code>.
+    </p>
+
+    <div class="row">
+      <div class="col">
+        <div class="leaflet-box" id="leafletList"></div>
+        <p class="hint">We'll build a personalised URL for exactly those leaflets.</p>
+      </div>
+
+      <div class="col">
+        <label>Patient-facing URL</label>
+        <div id="customUrlPreview" class="qr-url-preview"></div>
+
+        <div id="contentsPreview"></div>
+
+        <p style="margin-top:12px;">
+          <button id="customMakeBtn" class="btn">Use custom selection in QR</button>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <div id="diag"></div>
+
+  <script src="qr.js"></script>
+</body>
+</html>
